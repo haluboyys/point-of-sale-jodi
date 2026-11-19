@@ -1,0 +1,48 @@
+<div class="mb-4">
+    <x-form.label :props="[
+        'for' => 'category_type',
+        'label' => 'Tipe Kategori',
+        'required' => true,
+        'class' => 'text-slate-700 font-medium text-sm',
+    ]" />
+
+    <x-form.input :props="[
+        'id' => 'category_type',
+        'name' => 'category_type',
+        'placeholder' => 'Tipe Kategori',
+        'value' => 'Rak',
+        'readonly' => true,
+    ]" />
+</div>
+
+<div class="mb-4">
+    <x-form.label :props="[
+        'for' => 'category_code',
+        'label' => 'Kode Kategori',
+        'required' => true,
+        'class' => 'text-slate-700 font-medium text-sm',
+    ]" />
+
+    <x-form.input :props="[
+        'id' => 'category_code',
+        'name' => 'category_code',
+        'placeholder' => 'Kode Kategori. Contoh: 000',
+        'value' => old('category_code', $category->category_code ?? null),
+    ]" />
+</div>
+
+<div class="mb-4">
+    <x-form.label :props="[
+        'for' => 'category_name',
+        'label' => 'Nama Kategori',
+        'required' => true,
+        'class' => 'text-slate-700 font-medium text-sm',
+    ]" />
+
+    <x-form.input :props="[
+        'id' => 'category_name',
+        'name' => 'category_name',
+        'placeholder' => 'Nama Kategori. Contoh: RAK A',
+        'value' => old('category_name', $category->category_name ?? null),
+    ]" />
+</div>

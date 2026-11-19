@@ -1,0 +1,39 @@
+FROM php:8.3-fpm-alpine
+
+RUN apk add --no-cache \
+    bash \
+    curl \
+    sqlite-dev \
+    libzip-dev \
+    icu-dev \
+    zlib-dev \
+    oniguruma-dev \
+    freetype-dev \
+    libjpeg-turbo-dev \
+    libpng-dev \
+    libwebp-dev
+
+RUN docker-php-ext-configure gd \
+    --with-freetype \
+    --with-jpeg \
+    --with-webp
+
+RUN docker-php-ext-install \
+    gd \
+    bcmath \
+    zip \
+    intl \
+    mbstring \
+    exif
+
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www/html
+
+ARG UID
+ARG GID
+
+RUN addgroup -g ${GID} appgroup \
+    && adduser -D -u ${UID} -G appgroup appuser
+
+USER appuser

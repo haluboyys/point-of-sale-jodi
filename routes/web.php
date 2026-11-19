@@ -1,0 +1,153 @@
+<?php
+
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CashierController;
+use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\RegionController;
+use App\Http\Controllers\SaleController;
+use App\Http\Controllers\SaleDetailController;
+use App\Http\Controllers\StockController;
+use App\Http\Controllers\StockLogController;
+use App\Http\Controllers\StockTakenController;
+use App\Http\Controllers\StoreController;
+use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\SupplierStockController;
+use App\Http\Controllers\UserController;
+use App\Http\Middleware\AdminMiddleware;
+use Illuminate\Support\Facades\Route;
+
+Route::middleware('guest')->group(function () {
+    Route::controller(AuthController::class)->group(function () {
+        // LOGIN
+        Route::get('login', 'index');
+        Route::post('login', 'login')->name('login');
+    });
+});
+
+Route::middleware('auth')->group(function () {
+    Route::middleware(AdminMiddleware::class)->group(function () {
+        // REGION
+        Route::resource('region', RegionController::class)->except('show');
+
+        // USER
+        Route::resource('user', UserController::class)->except('show');
+
+        // SUPPLIER
+        Route::resource('supplier', SupplierController::class)
+            ->except('show');
+
+        // SUPPLIER STOCK
+        Route::resource('supplier-stock', SupplierStockController::class);
+
+        // SALE
+        Route::resource('sale', SaleController::class)
+            ->except(['create', 'store', 'update']);
+        Route::resource('sale-detail', SaleDetailController::class)
+            ->only(['update', 'destroy']);
+        Route::get('sale/detail/{sale}', [SaleController::class, 'detail'])
+            ->name('sale.detail');
+
+        // STOCK
+        Route::delete('stock/reset-all', [StockController::class, 'resetAll'])
+            ->name('stock.reset-all');
+        Route::resource('stock', StockController::class)->except('show');
+        Route::delete('stock/reset/{stock}', [StockController::class, 'reset'])
+            ->name('stock.reset');
+        Route::post('stock/report', [StockController::class, 'report'])
+            ->name('stock.report');
+
+        Route::get('stock/log/{stock}', [StockLogController::class, 'index'])
+            ->name('stock.log');
+
+        Route::controller(StockTakenController::class)->group(function () {
+            Route::get('stock/taken', 'index')->name('stock.taken');
+            Route::post('stock/taken', 'store')->name('stock.taken.store');
+            Route::post('stock/taken/report', 'report')->name('stock.taken.report');
+        });
+
+        // CATEGORY & SUB CATEGORY
+        Route::controller(CategoryController::class)->group(function () {
+            // CATEGORY
+            Route::get('category', 'itemCategory')->name('category.index');
+            Route::prefix('category')->group(function () {
+                Route::get('create', 'createCategoryItem')
+                    ->name('category.create');
+                Route::post('create', 'storeCategoryItem');
+                Route::get('{category}/edit', 'editCategoryItem')
+                    ->name('category.edit');
+                Route::put('{category}/update', 'UpdateCategoryItem')
+                    ->name('category.update');
+            });
+
+            // SUB CATEGORY
+            Route::get('customer-category', 'customerCategory')->name('customer-category.index');
+            Route::prefix('customer-category')->group(function () {
+                Route::get('create', 'createCategoryCustomer')
+                    ->name('customer-category.create');
+                Route::post('create', 'storeCategoryCustomer');
+                Route::get('{category}/edit', 'editCategoryCustomer')
+                    ->name('customer-category.edit');
+                Route::put('{category}/update', 'updateCategoryCustomer')
+                    ->name('customer-category.update');
+            });
+
+            // RACK CATEGORY
+            Route::get('rack', 'rackCategory')->name('rack.index');
+            Route::prefix('rack')->group(function() {
+                Route::get('create', 'createRackCategory')->name('rack.create');
+                Route::post('store', 'storeRackCategory')->name('rack.store');
+                Route::get('{category}/edit', 'editRackCategory')->name('rack.edit');
+                Route::put('{category}/updae', 'updateRackCategory')->name('rack.update');
+            });
+
+            // DESTROY CATEGORY & SUBCATEGORY
+            Route::delete('category/{category}', 'deleteCategory')
+                ->name('category.delete');
+        });
+
+        // CUSTOMER
+        Route::resource('customer', CustomerController::class);
+        Route::prefix('customer')->controller(CustomerController::class)
+            ->group(function () {
+                Route::post('pay', 'pay')->name('customer.pay');
+            });
+
+        // PURCHASE
+        Route::resource('purchase', PurchaseController::class);
+        Route::prefix('purchase')->controller(PurchaseController::class)
+            ->group(function () {
+                Route::post('search-item', 'searchItem')->name('purchase.search.item');
+                Route::post('get-item', 'getItem')->name('purchase.get.item');
+                Route::post('report', 'report')->name('purchase.report');
+                Route::post('update-item', 'updateItem')->name('purchase.update.item');
+                Route::post('delete-item', 'deleteItem')->name('purchase.delete.item');
+            });
+
+        // STORE
+        Route::resource('store', StoreController::class)->only(['index', 'store']);
+    });
+
+    Route::post('sale/report', [SaleController::class, 'report'])
+            ->name('sale.report');
+
+    // DASHBOARD
+    Route::get('/', DashboardController::class)->name('dashboard');
+
+    // LOGOUT
+    Route::post('logout', [AuthController::class, 'logout'])->name('logout');
+
+    // CASHIER
+    Route::controller(CashierController::class)->group(function () {
+        Route::get('cashier', 'index')->name('cashier');
+        Route::prefix('cashier')->group(function () {
+            Route::post('get-item', 'getItem')->name('cashier.get-item');
+            Route::post('get-credit', 'getCredit')->name('cashier.get-credit');
+            Route::post('checkout', 'checkout')->name('cashier.checkout');
+            Route::get('search', 'search')->name('cashier.search');
+            Route::get('get-products', 'products')->name('cashier.get-products');
+        });
+    });
+});

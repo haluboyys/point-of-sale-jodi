@@ -1,0 +1,594 @@
+@extends('layouts.app')
+
+@push('styles')
+    <style>
+        @media print {
+            body * {
+                visibility: hidden !important;
+                margin: 0;
+            }
+
+            #modal-container,
+            #modal-container * {
+                visibility: visible !important;
+            }
+
+            #modal-container {
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 75mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white !important;
+                box-shadow: none !important;
+                display: block !important;
+            }
+
+            #modal-card {
+                all: unset;
+                width: 100%;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+@endpush
+
+@section('title', 'Kasir')
+
+@section('navTitle', 'Kasir POS')
+
+@section('content')
+    <div class="grid grid-cols-2 gap-4 items-start">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <div class="pb-3 mb-3 border-b border-slate-200">
+                <h1 class="font-semibold text-sm text-slate-700">Pelanggan & Barang</h1>
+            </div>
+
+            <div class="mb-3">
+                <x-form.label :props="[
+                    'for' => 'sales_customer_id',
+                    'label' => 'Pelanggan',
+                    'required' => true,
+                    'class' => 'text-slate-700 font-medium text-sm',
+                ]" />
+                <x-form.select :props="[
+                    'id' => 'sales_customer_id',
+                    'name' => 'sales_customer_id',
+                    'class' => 'w-full',
+                    'value' => null,
+                ]" :options="$customers" />
+            </div>
+
+            <div class="mb-4">
+                <x-form.label :props="[
+                    'for' => 'sales_stock_id',
+                    'label' => 'Barang',
+                    'required' => true,
+                    'class' => 'text-slate-700 font-medium text-sm',
+                ]" />
+                <x-form.select :props="[
+                    'id' => 'sales_stock_id',
+                    'name' => 'sales_stock_id',
+                    'class' => 'w-full',
+                    'value' => null,
+                ]" :options="$stocks" />
+            </div>
+
+            <div class="flex gap-2">
+                <x-form.input :props="[
+                    'id' => 'sales_quantity',
+                    'name' => 'sales_quantity',
+                    'placeholder' => 'Jumlah (PCS)',
+                    'value' => null,
+                    'class' => 'number-input',
+                ]" />
+
+                <button type="button" id="chart-button"
+                    class="px-4 rounded-lg border border-slate-800 text-slate-800 font-medium text-sm cursor-pointer hover:bg-slate-800 hover:text-white active:scale-95 transition-all duration-200">
+                    Keranjang
+                </button>
+            </div>
+        </div>
+
+        {{-- PAYMENT --}}
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <div class="pb-3 mb-4 border-b border-slate-200">
+                <h1 class="font-semibold text-sm text-slate-700">Keranjang Belanja</h1>
+            </div>
+
+            {{-- ITEM --}}
+            <div class="stockGroup mt-2">
+                <div class="rounded-lg border border-slate-200 text-center py-4 italic text-sm tracking-wide text-slate-400">
+                    Keranjang Kosong.
+                </div>
+            </div>
+
+            <div class="h-px bg-slate-200 mt-6 mb-4"></div>
+
+            {{-- DISKON & PAYMENT METHOD --}}
+            <div class="grid grid-cols-3 gap-4">
+                <div>
+                    <x-form.label :props="[
+                        'for' => 'sales_payment_type',
+                        'label' => 'Jenis Pembayaran',
+                        'required' => true,
+                        'class' => 'text-slate-700 font-medium text-sm',
+                    ]" />
+                    <x-form.select :props="[
+                        'id' => 'sales_payment_type',
+                        'name' => 'sales_payment_type',
+                        'class' => 'w-full',
+                        'value' => null,
+                    ]" :options="[
+                        'cash' => 'Kontan',
+                        'credit' => 'Tempo/Kredit',
+                    ]" />
+                </div>
+
+                <div>
+                    <x-form.label :props="[
+                        'for' => 'sales_payment',
+                        'label' => 'Jumlah Uang',
+                        'required' => true,
+                        'class' => 'text-slate-700 font-medium text-sm',
+                    ]" />
+                    <x-form.input :props="[
+                        'id' => 'sales_payment',
+                        'name' => 'sales_payment',
+                        'class' => 'price-input',
+                        'placeholder' => 'Jumlah Uang',
+                        'value' => null,
+                    ]" />
+                </div>
+
+                <div>
+                    <x-form.label :props="[
+                        'for' => 'sales_discount',
+                        'label' => 'Diskon (%)',
+                        'required' => true,
+                        'class' => 'text-slate-700 font-medium text-sm',
+                    ]" />
+                    <x-form.input :props="[
+                        'id' => 'sales_discount',
+                        'name' => 'sales_discount',
+                        'class' => 'number-input',
+                        'value' => 0,
+                    ]" />
+                </div>
+            </div>
+
+            {{-- HAS CREDIT OR NO --}}
+            <div id="customerCredit">
+            </div>
+
+            {{-- SUMMARY --}}
+            <div class="mt-6 mb-4 rounded-lg border border-slate-200 p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="font-medium text-sm tracking-wide text-slate-600">
+                        <h2>Subtotal</h2>
+                    </div>
+                    <div class="summary-subtotal font-medium text-sm tracking-wide text-slate-700">
+                        <h2>Rp 0</h2>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between mb-2">
+                    <div class="font-medium text-sm tracking-wide text-slate-600">
+                        <h2>Diskon</h2>
+                    </div>
+                    <div class="summary-discount font-medium text-sm tracking-wide text-red-500">
+                        <h2>Rp 0</h2>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between mt-2">
+                    <div class="font-bold tracking-wide text-slate-800 text-base">
+                        <h2>Total</h2>
+                    </div>
+                    <div class="summary-total font-bold tracking-wide text-slate-800 text-base">
+                        <h2>Rp 0</h2>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between mt-1">
+                    <div class="font-bold tracking-wide text-emerald-600 text-base">
+                        <h2>Kembalian</h2>
+                    </div>
+                    <div class="summary-change font-bold tracking-wide text-emerald-600 text-base">
+                        <h2>Rp 0</h2>
+                    </div>
+                </div>
+            </div>
+
+            {{-- CHECKOUT BUTTON --}}
+            <button type="button" id="checkout-button"
+                class="px-4 py-2.5 w-full font-medium tracking-wide bg-slate-800 hover:bg-slate-700 rounded-lg text-white text-sm transition-all duration-200 cursor-pointer active:scale-95 shadow-sm">
+                Proses Pembayaran
+            </button>
+        </div>
+    </div>
+
+    {{-- MODAL --}}
+    <div id="modal-container"
+        class="fixed inset-0 bg-gray-600/50 overflow-y-auto h-full w-full items-center justify-center hidden">
+        <div id="modal-card"
+            class="relative mx-auto p-4 border border-slate-300 w-full max-w-[400px] shadow-lg rounded-xl bg-white">
+        </div>
+    </div>
+@endsection
+
+@push('scripts')
+    @vite('resources/js/function.js')
+    <script type="module">
+        $(document).ready(function() {
+            const customFunction = window.CustomFunction;
+
+            $('.number-input').on('input',
+                function() {
+                    this.value = customFunction.numberOnly(this.value);
+                });
+
+            $('.price-input').on('input',
+                function() {
+                    this.value = customFunction.formatNumberToRupiah(this.value.replace(/[^0-9]/g, ''));
+                });
+
+            // Customer
+            $('#sales_customer_id').on('change',
+                function() {
+                    const customerId = $(this).val();
+                    resetCartItems();
+
+                    if (customerId != 1) {
+                        $.ajax({
+                            url: "{{ route('cashier.get-credit') }}",
+                            type: "POST",
+                            data: {
+                                customerId: customerId
+                            },
+                            success: function(response) {
+                                $('#customerCredit').append(response);
+                            }
+                        });
+                    }
+                });
+
+            let cartItems = [];
+
+            $('#chart-button').on('click',
+                function() {
+                    const customerId = $('#sales_customer_id').val();
+                    const stockId = $('#sales_stock_id').val();
+                    const quantity = $('#sales_quantity').val();
+
+                    $.ajax({
+                        url: "{{ route('cashier.get-item') }}",
+                        type: "POST",
+                        data: {
+                            customerId: customerId,
+                            stockId: stockId,
+                            quantity: quantity
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                const item = {
+                                    stockId: response.data.stockId,
+                                    stockName: response.data.stockName,
+                                    price: response.data.price,
+                                    quantity: parseInt(response.data.quantity),
+                                    maxQuantity: parseInt(response.data.maxQuantity)
+                                };
+
+                                const existingIndex = cartItems.findIndex(i => i.stockId === item
+                                    .stockId);
+
+                                if (existingIndex !== -1) {
+                                    const currentQuantity = cartItems[existingIndex].quantity;
+                                    const newQuantity = currentQuantity + item.quantity;
+
+                                    if (newQuantity > item.maxQuantity) {
+                                        cartItems[existingIndex].quantity = item.maxQuantity;
+
+                                        Swal.fire({
+                                            icon: 'warning',
+                                            title: 'Melebihi Stok',
+                                            text: `Jumlah maksimal stok ${item.stockName} adalah ${item.maxQuantity}`
+                                        });
+                                    } else {
+                                        cartItems[existingIndex].quantity = newQuantity;
+                                    }
+                                } else {
+                                    if (item.quantity > item.maxQuantity) {
+                                        item.quantity = item.maxQuantity;
+
+                                        Swal.fire({
+                                            icon: 'warning',
+                                            title: 'Melebihi Stok',
+                                            text: `Jumlah maksimal stok ${item.stockName} adalah ${item.maxQuantity}`
+                                        });
+                                    }
+
+                                    cartItems.push(item);
+                                }
+
+                                $('#sales_quantity').val('');
+                                renderCartItems();
+                            } else if (!response.success) {
+                                Swal.fire('Error', response.message, 'error');
+                            }
+                        }
+                    });
+                });
+
+            // CHECKOUT
+            $('#checkout-button').on('click',
+                function() {
+                    if (cartItems.length == 0) {
+                        Swal.fire({
+                            title: 'Error',
+                            text: 'Keranjang Kosong!',
+                            icon: 'error'
+                        });
+                        return;
+                    }
+
+                    const customerId = $('#sales_customer_id').val();
+                    const paymentType = $('#sales_payment_type').val();
+                    const totalPayment = parseFloat($('#sales_payment').val().replace(/\./g, '') || 0);
+                    const discount = $('#sales_discount').val();
+                    const items = cartItems;
+                    let is_credit = 0;
+
+                    let totalPrice = 0;
+                    cartItems.forEach(item => {
+                        totalPrice += item.price * item.quantity
+                    });
+
+                    const discountAmount = totalPrice * (discount / 100);
+                    const finalTotalPrice = totalPrice - discountAmount;
+
+                    if ((totalPayment < finalTotalPrice) && customerId != 1) {
+                        Swal.fire({
+                            title: 'Error',
+                            text: 'Jumlah bayar kurang dari total bayar (Sisa bayar Pelanggan Umum tidak bisa secara Credit/Tempo)',
+                            icon: 'error'
+                        });
+                        return;
+                    }
+
+                    if ((totalPayment < totalPrice) && customerId != 1) {
+                        Swal.fire({
+                            title: 'Perhatian',
+                            text: 'Jumlah bayar kurang. Apakah ingin dijadikan hutang?',
+                            icon: 'warning',
+                            showCancelButton: true,
+                            cancelButtonText: 'Batal'
+                        }).then((res) => {
+                            if (res.isConfirmed) {
+                                is_credit = 1;
+                                showLoadingAndSubmit();
+                            }
+                        });
+                    } else {
+                        showLoadingAndSubmit();
+                    }
+
+                    function showLoadingAndSubmit() {
+                        Swal.fire({
+                            title: 'Memproses...',
+                            text: 'Silakan tunggu sebentar',
+                            allowOutsideClick: false,
+                            didOpen: () => {
+                                Swal.showLoading();
+                            }
+                        });
+
+                        submitPayment();
+                    }
+
+                    function submitPayment() {
+                        $.ajax({
+                            url: "{{ route('cashier.checkout') }}",
+                            type: 'POST',
+                            data: {
+                                customer_id: customerId,
+                                payment_type: paymentType,
+                                total_payment: totalPayment,
+                                discount: discount,
+                                items: items,
+                                is_credit: is_credit
+                            },
+                            success: function(res) {
+                                if (res.success) {
+                                    Swal.fire({
+                                        title: 'Sukses',
+                                        text: res.message,
+                                        icon: 'success'
+                                    }).then(() => {
+                                        print(res.id);
+                                        resetCartItems();
+                                    });
+                                } else {
+                                    Swal.fire({
+                                        title: 'Error',
+                                        text: res.message,
+                                        icon: 'error'
+                                    });
+                                }
+                            }
+                        });
+                    }
+                });
+
+            const modalCard = $('#modal-card');
+            const modalContainer = $('#modal-container');
+
+            $(window).on('click',
+                function(e) {
+                    if ($(e.target).is(modalContainer)) {
+                        modalContainer.addClass('hidden').removeClass('flex');
+                        modalCard.html('');
+                        location.reload()
+                    }
+                });
+
+            $(document).on('keydown',
+                function(event) {
+                    if (event.key === 'Escape' && modalContainer.hasClass('flex')) {
+                        modalContainer.addClass('hidden').removeClass('flex');
+                        location.reload()
+                    }
+                });
+
+            $(document).on('input', '.quantity-input',
+                function() {
+                    const index = $(this).closest('.stockItem').data('index');
+                    let newQuantity = parseInt($(this).val()) || 1;
+                    const maxQuantity = cartItems[index].maxQuantity;
+
+                    if (newQuantity > maxQuantity) {
+                        newQuantity = maxQuantity;
+                        $(this).val(maxQuantity);
+
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Jumlah Melebihi Stok!',
+                            text: `Jumlah maksimal stok adalah ${maxQuantity}`
+                        });
+                    }
+
+                    cartItems[index].quantity = newQuantity;
+                    calculateSummary();
+                });
+
+            $(document).on('click', '.delete-item',
+                function() {
+                    const index = $(this).closest('.stockItem').data('index');
+                    cartItems.splice(index, 1);
+                    renderCartItems();
+                });
+
+            $('#sales_discount, #sales_payment').on('input',
+                function() {
+                    calculateSummary();
+                });
+
+            $('#sales_payment_type').on('change',
+                function() {
+                    const customerId = $('#sales_customer_id').val();
+                    const paymentType = $(this).val();
+
+                    if (customerId == 1 && paymentType == 'credit') {
+                        if (customerId == 1 && paymentType == 'credit') {
+                            const select = $(this);
+                            setTimeout(() => {
+                                select.val('cash').trigger('change');
+                                Swal.fire('Error',
+                                    'Pelanggan Umum tidak bisa membayar dengan Credit/Tempo',
+                                    'error');
+                            }, 10);
+                        }
+                    }
+                });
+
+            function calculateSummary() {
+                let subTotal = 0;
+
+                cartItems.forEach(item => {
+                    subTotal += item.price * item.quantity;
+                });
+
+                const discountPercent = parseFloat($('#sales_discount').val()) || 0;
+                const rawPaymentAmount = $('#sales_payment').val().replace(/\D/g, '');
+                const paymentAmount = parseFloat(rawPaymentAmount) || 0;
+
+                const discount = (discountPercent / 100) * subTotal;
+                const total = subTotal - discount;
+                const change = paymentAmount - total;
+
+                $('.summary-subtotal').text('Rp ' + (customFunction.formatNumberToRupiah(subTotal) || '0'));
+                $('.summary-discount').text('Rp ' + (customFunction.formatNumberToRupiah(discount) || '0'));
+                $('.summary-total').text('Rp ' + (customFunction.formatNumberToRupiah(total) || '0'));
+
+                const changeFormatted = customFunction.formatNumberToRupiah(change) || '0';
+                const changeElement = $('.summary-change');
+
+                if (change < 0) {
+                    changeElement
+                        .text(`-Rp ${changeFormatted}`)
+                        .removeClass('text-emerald-600')
+                        .addClass('text-red-500');
+                } else {
+                    changeElement
+                        .text(`Rp ${changeFormatted}`)
+                        .removeClass('text-red-500')
+                        .addClass('text-emerald-600');
+                }
+            }
+
+            function renderCartItems() {
+                const container = $('.stockGroup');
+                container.html('');
+
+                if (cartItems.length === 0) {
+                    container.html(`
+                        <div class="rounded-lg border border-slate-200 text-center py-4 italic text-sm tracking-wide text-slate-400">
+                            Keranjang Kosong.
+                        </div>
+                    `);
+                } else {
+                    cartItems.forEach((item, index) => {
+                        const itemHtml = `
+                        <div class="stockItem mb-2 flex justify-between items-center py-1" data-index="${index}">
+                            <div>
+                                <h1 class="text-sm tracking-wider font-semibold text-slate-700">
+                                ${item.stockName}
+                                </h1>
+                                <h2 class="text-xs tracking-wider text-slate-500">
+                                    Rp ${customFunction.formatNumberToRupiah(item.price)}
+                                </h2>
+                            </div>
+                            <div class="space-x-2 flex items-center">
+                                <input type="text" name="sales_quantity[]"
+                                    class="number-input quantity-input border-b border-slate-300 outline-none py-2 px-3 rounded-lg w-[90px] text-sm text-center focus:border-slate-500" value="${item.quantity}">
+                                <button type="button"
+                                    class="delete-item px-2 rounded-lg text-red-400 cursor-pointer active:scale-95 transition duration-200 hover:text-red-600">
+                                    <i class="fa-solid fa-trash text-[14px]"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+
+                        container.append(itemHtml);
+                    });
+                }
+
+                calculateSummary();
+            };
+
+            function resetCartItems() {
+                cartItems.length = 0;
+                $('#sales_payment').val('');
+                $('#sales_discount').val(0);
+                $('#customerCredit').html('');
+                renderCartItems();
+            }
+
+            function print(salesId) {
+                $.ajax({
+                    url: `/sale/${salesId}`,
+                    type: "GET",
+                    success: function(res) {
+                        modalCard.html(res);
+                        modalContainer.removeClass('hidden').addClass('flex');
+                        setTimeout(() => {
+                            window.print();
+                        }, 100);
+                    }
+                });
+            }
+        });
+    </script>
+@endpush

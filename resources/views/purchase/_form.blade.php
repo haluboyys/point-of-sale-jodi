@@ -1,0 +1,101 @@
+<div class="mb-4">
+    <x-form.label :props="[
+        'for' => 'purchase_invoice',
+        'label' => 'Bukti / Faktur Beli',
+        'required' => true,
+        'class' => 'text-slate-700 font-medium text-sm',
+    ]" />
+
+    <x-form.input :props="[
+        'id' => 'purchase_invoice',
+        'name' => 'purchase_invoice',
+        'placeholder' => 'Faktu Beli',
+        'value' => old('purchase_invoice', $purchase->purchase_invoice ?? $invoice),
+        'readonly' => true,
+    ]" />
+</div>
+
+<div class="grid grid-cols-2 gap-4 mb-4">
+    <div>
+        <x-form.label :props="[
+            'for' => 'purchase_supplier_id',
+            'label' => 'Pemasok / Supplier',
+            'required' => true,
+            'class' => 'text-slate-700 font-medium text-sm',
+        ]" />
+
+        <x-form.select :props="[
+            'id' => 'purchase_supplier_id',
+            'name' => 'purchase_supplier_id',
+            'value' => old('purchase_supplier_id', $purchase->purchase_supplier_id ?? null),
+            'class' => 'w-full',
+        ]" :options="$suppliers" />
+    </div>
+
+    <div>
+        <x-form.label :props="[
+            'for' => 'purchase_area',
+            'label' => 'Wilayah',
+            'required' => true,
+            'class' => 'text-slate-700 font-medium text-sm',
+        ]" />
+
+        <x-form.select :props="[
+            'id' => 'purchase_region_id',
+            'name' => 'purchase_region_id',
+            'value' => old('purchase_region_id', $purchase->purchase_region_id ?? null),
+            'class' => 'w-full',
+        ]" :options="$regions" />
+    </div>
+</div>
+
+<div class="mb-4">
+    <x-form.label :props="[
+        'for' => 'purchase_note',
+        'label' => 'Keterangan',
+        'class' => 'text-slate-700 font-medium text-sm',
+    ]" />
+
+    <x-form.input :props="[
+        'id' => 'purchase_note',
+        'name' => 'purchase_note',
+        'placeholder' => 'Keterangan',
+        'value' => old('purchase_note', $purchase->purchase_note ?? null),
+    ]" />
+</div>
+
+@if (!isset($state))
+    <div class="h-px bg-slate-200 mt-4 mb-4"></div>
+
+    <div class="mb-4">
+        <h1 class="font-medium text-sm text-slate-700">Tambahkan Data Barang</h1>
+    </div>
+
+    <div class="grid grid-cols-3 gap-4 mb-4">
+        <div>
+            <x-form.input :props="[
+                'id' => 'item',
+                'name' => 'item',
+                'placeholder' => 'Masukkan kode produk',
+                'autofocus' => true,
+            ]" />
+        </div>
+
+        <div>
+            <x-form.input :props="[
+                'id' => 'quantity',
+                'name' => 'quantity',
+                'class' => 'number-input',
+                'placeholder' => 'Masukkan Jumlah Barang (PCS)',
+                'value' => 1,
+            ]" />
+        </div>
+
+        <div>
+            <button type="button" id="item-button"
+                class="px-4 py-[10px] border border-slate-300 rounded-lg cursor-pointer text-slate-700 bg-white hover:bg-slate-100 font-medium text-sm transition duration-200">
+                Tambah Barang
+            </button>
+        </div>
+    </div>
+@endif

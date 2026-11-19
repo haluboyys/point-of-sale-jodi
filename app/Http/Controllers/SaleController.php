@@ -1,0 +1,331 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests\SaleReportRequest;
+use App\Models\Category;
+use App\Models\Sale;
+use App\Models\Stock;
+use App\Models\StockLog;
+use App\Services\ValidationService;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Session;
+use Illuminate\View\View;
+use Yajra\DataTables\DataTables;
+
+class SaleController
+{
+    protected $validationService;
+
+    public function __construct(ValidationService $validationService)
+    {
+        $this->validationService = $validationService;
+    }
+
+    public function index(Request $request): View|JsonResponse
+    {
+        if ($request->ajax()) {
+            $startDate = Carbon::parse($request->input('start_date') ?: now())->startOfDay();
+            $endDate   = Carbon::parse($request->input('end_date') ?: now())->endOfDay();
+
+            $sales = Sale::whereBetween('created_at', [$startDate, $endDate])
+                ->whereIn('sales_status', [Sale::PAID_STATUS, Sale::CREDIT_STATUS])
+                ->with([
+                    'customer:tbl_customers.customer_id,tbl_customers.customer_name',
+                    'details'
+                ])
+                ->orderByDesc('created_at');
+
+            $summary = [
+                'total_sell_price' => 0,
+                'total_debt' => 0,
+            ];
+
+            $salesData = $sales->get();
+
+            foreach ($salesData as $sale) {
+                $summary['total_debt'] += $sale->sale_total_debt ?? 0;
+                $summary['total_sell_price'] += $sale->sales_total_price ?? 0;
+            }
+
+            return DataTables::of($sales)
+                ->addIndexColumn()
+                ->addColumn('created_at', fn($sale) => $sale->formatted_created_at)
+                ->addColumn('actions', function ($sale) { 
+                    $actions = []; 
+
+                    if ($sale->sales_status != Sale::CANCEL_STATUS) { 
+                        if ($sale->sales_status == Sale::PAID_STATUS) { 
+                            $actions['edit'] = route('sale.edit', $sale->sales_id); 
+                            $actions['delete'] = route('sale.destroy', $sale->sales_id); 
+                        } 
+                        
+                        $actions['print'] = $sale->sales_id; } return $actions; 
+                })
+                ->with([ 
+                    'total_price' => $summary['total_sell_price'], 
+                    'total_debt' => $summary['total_debt']
+                ])
+                ->toJson();
+        }
+
+        $categories = Category::getItemCategories()->prepend('Semua Kategori', 'all');
+
+        $validator = $this->validationService
+            ->generateValidation(SaleReportRequest::class, '#form-report');
+
+        return view('sale.index', compact(['categories', 'validator']));
+    }
+
+    public function edit(Sale $sale): View
+    {
+        $sale->load(['details']);
+
+        return view('sale.edit', compact('sale'));
+    }
+
+    public function show(Sale $sale): View
+    {
+        $store = Session::get('store');
+
+        $sale->load(['details', 'customer']);
+
+        return view('sale._print', compact(['sale', 'store']));
+    }
+
+    public function destroy(Sale $sale): JsonResponse
+    {
+        abort_unless(request()->expectsJson(), 403);
+
+        return DB::transaction(function () use ($sale) {
+            $sale = Sale::whereKey($sale->getKey())->lockForUpdate()->firstOrFail();
+
+            if ($sale->sales_status == Sale::CANCEL_STATUS) {
+                return response()->json(true);
+            }
+
+            $sale->load(['credit', 'details']);
+            $user = Auth::user();
+
+            foreach ($sale->details as $detail) {
+                $stock = Stock::whereKey($detail->sale_detail_stock_id)->lockForUpdate()->firstOrFail();
+
+                $stock->update([
+                    'stock_total' => $stock->stock_total + $detail->sale_detail_quantity,
+                    'stock_out' => $stock->stock_out - $detail->sale_detail_quantity,
+                ]);
+
+                StockLog::create([
+                    'stock_log_stock_id' => $stock->stock_id,
+                    'stock_log_quantity' => $detail->sale_detail_quantity,
+                    'stock_log_description' => 'Penyesuaian karena penghapusan penjualan',
+                    'stock_log_status' => StockLog::IN_STATUS,
+                    'stock_log_user_id' => $user->user_id,
+                ]);
+            }
+
+            if ($credit = $sale->credit) {
+                $credit->delete();
+            }
+
+            $sale->update([
+                'sales_status' => Sale::CANCEL_STATUS
+            ]);
+
+            return response()->json(true);
+        });
+    }
+
+    public function detail(Sale $sale): View
+    {
+        return view('sale.show', compact('sale'));
+    }
+
+    public function report(SaleReportRequest $request)
+    {
+        $validated = $request->validated();
+
+        $startDate = $validated['start_date'];
+        $endDate = $validated['end_date'];
+        $typeCategory = $validated['type_category'];
+        $stockCategory = $validated['stock_category'];
+
+        return $typeCategory === '1'
+            ? $this->reportDetail($startDate, $endDate, $stockCategory)
+            : $this->reportGeneral($startDate, $endDate, $stockCategory);
+    }
+
+    private function reportDetail($startDate, $endDate, $categoryId)
+    {
+        $startDate = Carbon::parse($startDate)->startOfDay();
+        $endDate = Carbon::parse($endDate)->endOfDay();
+
+        $sales = Sale::whereBetween('created_at', [$startDate, $endDate])
+            ->where(function ($query) {
+                $query->where('sales_status', SALE::PAID_STATUS)
+                    ->orWhere('sales_status', SALE::CREDIT_STATUS);
+            })
+            ->whereHas('details', function ($query) use ($categoryId) {
+                if ($categoryId !== 'all') {
+                    $query->where('sale_detail_stock_category_id', $categoryId);
+                }
+            })
+            ->with([
+                'details' => function ($query) use ($categoryId) {
+                    if ($categoryId !== 'all') {
+                        $query->where('sale_detail_stock_category_id', $categoryId);
+                    }
+                }
+            ])
+            ->get();
+
+        $datas = $sales->map(
+            fn($sale) => [
+                'invoice' => $sale->sales_invoice,
+                'total_gross' => $sale->sales_total_gross,
+                'total_price' => $sale->sales_total_price,
+                'total_debt' => $sale->sale_total_debt ?? 0,
+                'total_change' => $sale->sales_total_change,
+                'date' => $sale->created_at,
+                'items' => $sale->details->map(function ($detail) {
+                    $totalSellPrice = $detail->sale_detail_price * $detail->sale_detail_quantity;
+                    $profit = ($detail->sale_detail_price - $detail->sale_detail_cost_price)
+                        * $detail->sale_detail_quantity;
+
+                    return [
+                        'code' => $detail->sale_detail_stock_code,
+                        'name' => $detail->sale_detail_stock_name,
+                        'quantity' => $detail->sale_detail_quantity,
+                        'category' => $detail->sale_detail_stock_category_name,
+                        'cost_price' => $detail->sale_detail_cost_price,
+                        'sell_price' => $detail->sale_detail_price,
+                        'total_sell_price' => $totalSellPrice,
+                        'total_price' => $detail->sale_detail_total_price,
+                        'discount' => $detail->sale_detail_discount,
+                        'discount_amount' => $detail->sale_detail_discount_amount,
+                        'profit' => $profit
+                    ];
+                }),
+            ]
+        );
+
+        $totals = [
+            'total_quantity' => 0,
+            'total_sell_price' => 0,
+            'total_debt' => 0,
+            'total_discount_amount' => 0,
+            'total_profit' => 0,
+        ];
+
+        foreach ($datas as $sale) {
+            $totals['total_debt'] += $sale['total_debt'];
+            $saleTotalSellPrice = 0;
+
+            foreach ($sale['items'] as $item) {
+                $totals['total_quantity'] += $item['quantity'];
+                $saleTotalSellPrice += $item['total_sell_price'];
+                $totals['total_discount_amount'] += $item['discount_amount'];
+                $totals['total_profit'] += $item['profit'];
+            }
+
+            $totals['total_sell_price'] += $categoryId === 'all'
+                ? $sale['total_price']
+                : $saleTotalSellPrice;
+        }
+
+        $formattedStartDate = Carbon::parse($startDate)->format('d M Y');
+        $formattedEndDate = Carbon::parse($endDate)->format('d M Y');
+
+        $pdf = Pdf::loadView(
+            'sale.report.detail',
+            compact(['datas', 'totals', 'formattedStartDate', 'formattedEndDate'])
+        )
+            ->setPaper('a4', 'landscape');
+
+        return $pdf->download("LAPORAN-PENJUALAN-DETAIL-{$startDate}-{$endDate}.pdf");
+    }
+
+    private function reportGeneral($startDate, $endDate, $categoryId)
+    {
+        $startDate = Carbon::parse($startDate)->startOfDay();
+        $endDate = Carbon::parse($endDate)->endOfDay();
+
+        $sales = Sale::whereBetween('created_at', [$startDate, $endDate])
+            ->where(function ($q) {
+                $q->where('sales_status', Sale::PAID_STATUS)
+                ->orWhere('sales_status', Sale::CREDIT_STATUS);
+            })
+            ->whereHas('details', function ($query) use ($categoryId) {
+                if ($categoryId !== 'all') {
+                    $query->where('sale_detail_stock_category_id', $categoryId);
+                }
+            })
+            ->with([
+                'details' => function ($query) use ($categoryId) {
+                    if ($categoryId !== 'all') {
+                        $query->where('sale_detail_stock_category_id', $categoryId);
+                    }
+                }
+            ])
+            ->get();
+
+        $categoryName = null;
+
+        if ($categoryId !== 'all') {
+            $category = Category::find($categoryId);
+            $categoryName = $category?->category_name ?? 'Kategori Tidak Ditemukan';
+        }
+
+        $monthlyData = [];
+
+        foreach ($sales as $sale) {
+            $monthKey = $sale->created_at->format('Y-m');
+
+            if (!isset($monthlyData[$monthKey])) {
+                $monthlyData[$monthKey] = [
+                    'month' => Carbon::parse($sale->created_at)->setTimezone('Asia/Jakarta')->translatedFormat('F Y'),
+                    'total_quantity' => 0,
+                    'total_sell_price' => 0,
+                    'total_discount_amount' => 0,
+                    'total_profit' => 0,
+                    'total_debt' => 0,
+                ];
+            }
+
+            $monthlyData[$monthKey]['total_debt'] += $sale->sale_total_debt ?? 0;
+            $saleTotalSellPrice = 0;
+
+            foreach ($sale->details as $detail) {
+                $monthlyData[$monthKey]['total_quantity'] += $detail->sale_detail_quantity;
+                $saleTotalSellPrice += $detail->sale_detail_price * $detail->sale_detail_quantity;
+                $monthlyData[$monthKey]['total_discount_amount'] += $detail->sale_detail_discount_amount;
+                $monthlyData[$monthKey]['total_profit'] += ($detail->sale_detail_price - $detail->sale_detail_cost_price) * $detail->sale_detail_quantity;
+            }
+
+            $monthlyData[$monthKey]['total_sell_price'] += $categoryId === 'all'
+                ? $sale->sales_total_price
+                : $saleTotalSellPrice;
+        }
+
+        $formattedStartDate = Carbon::parse($startDate)->format('d M Y');
+        $formattedEndDate = Carbon::parse($endDate)->format('d M Y');
+
+        $pdf = Pdf::loadView(
+            'sale.report.general',
+            compact([
+                'monthlyData',
+                'formattedStartDate',
+                'formattedEndDate',
+                'categoryName'
+            ])
+        )
+            ->setPaper('a4', 'landscape');
+
+        return $pdf->download("LAPORAN-PENJUALAN-UMUM-{$startDate}-{$endDate}.pdf");
+    }
+}
