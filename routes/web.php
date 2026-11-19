@@ -116,6 +116,8 @@ Route::middleware('auth')->group(function () {
             });
 
         // PURCHASE
+        Route::delete('purchase/reset-all', [PurchaseController::class, 'resetAll'])
+            ->name('purchase.reset-all');
         Route::resource('purchase', PurchaseController::class);
         Route::prefix('purchase')->controller(PurchaseController::class)
             ->group(function () {

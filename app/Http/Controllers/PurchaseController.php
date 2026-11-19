@@ -287,6 +287,18 @@ class PurchaseController
         ]);
     }
 
+    public function resetAll(): JsonResponse
+    {
+        abort_unless(request()->expectsJson(), 403);
+
+        DB::transaction(function () {
+            PurchaseDetail::query()->delete();
+            Purchase::query()->delete();
+        });
+
+        return response()->json(true);
+    }
+
     // public function report(PurchaseReportRequest $request)
     // {
     //     $validated = $request->validated();

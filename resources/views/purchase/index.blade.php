@@ -22,10 +22,13 @@
             Laporan Pembelian
         </button>
 
-        <button type="button" data-url="{{ route('stock.reset-all') }}"
-            class="js-reset-all-stock inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium tracking-wide border border-red-600 hover:bg-white hover:text-red-600 transition-all duration-200 cursor-pointer shadow-sm">
+        <button type="button" data-url="{{ route('purchase.reset-all') }}" data-selector="#purchase-table"
+            data-confirm-text="Apakah anda yakin ingin menghapus semua data pembelian? Data stok barang tidak akan terhapus."
+            data-success-text="Semua data pembelian berhasil dihapus."
+            data-error-text="Semua data pembelian gagal dihapus."
+            class="js-reset-all inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium tracking-wide border border-red-600 hover:bg-white hover:text-red-600 transition-all duration-200 cursor-pointer shadow-sm">
             <i class="fa-solid fa-rotate-left text-xs"></i>
-            <span>Reset Stok</span>
+            <span>Reset Data Pembelian</span>
         </button>
     </div>
 
