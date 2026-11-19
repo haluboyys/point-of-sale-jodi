@@ -204,6 +204,8 @@ class StockController
 
         $stock->update([
             'stock_total' => 0,
+            'stock_in' => 0,
+            'stock_out' => 0,
         ]);
 
         return response()->json(true);
@@ -215,6 +217,8 @@ class StockController
 
         Stock::query()->update([
             'stock_total' => 0,
+            'stock_in' => 0,
+            'stock_out' => 0,
         ]);
 
         return response()->json(true);

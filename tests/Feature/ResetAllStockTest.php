@@ -36,7 +36,7 @@ class ResetAllStockTest extends TestCase
         ]);
     }
 
-    public function test_reset_all_sets_all_stock_total_to_zero_without_changing_other_fields(): void
+    public function test_reset_all_sets_all_stock_quantities_to_zero_without_changing_other_fields(): void
     {
         $first = Stock::create([
             'stock_code' => 'ITEM-1',
@@ -74,12 +74,12 @@ class ResetAllStockTest extends TestCase
         $second->refresh();
 
         $this->assertSame(0, $first->stock_total);
-        $this->assertSame(30, $first->stock_in);
-        $this->assertSame(5, $first->stock_out);
+        $this->assertSame(0, $first->stock_in);
+        $this->assertSame(0, $first->stock_out);
         $this->assertSame(5000, $first->stock_purchase_price);
 
         $this->assertSame(0, $second->stock_total);
-        $this->assertSame(10, $second->stock_in);
+        $this->assertSame(0, $second->stock_in);
         $this->assertSame(0, $second->stock_out);
         $this->assertSame(7500, $second->stock_purchase_price);
 

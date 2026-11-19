@@ -214,6 +214,11 @@ $(document).on("click", ".dt-delete", function (e) {
             $.ajax({
                 url: url,
                 method: "DELETE",
+                dataType: "json",
+                headers: {
+                    Accept: "application/json",
+                    "X-CSRF-TOKEN": $('meta[name="csrf-token"]').attr("content"),
+                },
                 success: function (response) {
                     if (response) {
                         Swal.fire(
@@ -235,17 +240,25 @@ $(document).on("click", ".dt-delete", function (e) {
 window.DataTables = DataTables;
 window.DataTablesAction = actions;
 
-// RESET ALL STOCK BUTTON
-$(document).on("click", ".js-reset-all-stock", function (e) {
+// RESET ALL BUTTON (STOCK / PURCHASE)
+$(document).on("click", ".js-reset-all-stock, .js-reset-all", function (e) {
     e.preventDefault();
 
     const button = $(this);
     const url = button.data("url");
     const selector = button.data("selector");
+    const confirmText =
+        button.data("confirm-text") ||
+        "Apakah anda yakin ingin mereset semua stok menjadi 0?";
+    const successText =
+        button.data("success-text") ||
+        "Semua stok berhasil direset menjadi 0.";
+    const errorText =
+        button.data("error-text") || "Semua stok gagal direset.";
 
     Swal.fire({
         title: "Perhatian",
-        text: "Apakah anda yakin ingin mereset semua stok menjadi 0?",
+        text: confirmText,
         icon: "warning",
         showCancelButton: true,
         confirmButtonText: "Reset",
@@ -255,26 +268,23 @@ $(document).on("click", ".js-reset-all-stock", function (e) {
             $.ajax({
                 url: url,
                 method: "DELETE",
+                dataType: "json",
+                headers: {
+                    Accept: "application/json",
+                    "X-CSRF-TOKEN": $('meta[name="csrf-token"]').attr("content"),
+                },
                 success: function (response) {
                     if (response) {
-                        Swal.fire(
-                            "Berhasil!",
-                            "Semua stok berhasil direset menjadi 0.",
-                            "success"
-                        );
+                        Swal.fire("Berhasil!", successText, "success");
                         if (selector) {
                             $(selector).DataTable().ajax.reload(null, false);
                         }
                     } else {
-                        Swal.fire("Gagal!", "Semua stok gagal direset.", "error");
+                        Swal.fire("Gagal!", errorText, "error");
                     }
                 },
                 error: function () {
-                    Swal.fire(
-                        "Gagal!",
-                        "Terjadi kesalahan saat mereset stok.",
-                        "error"
-                    );
+                    Swal.fire("Gagal!", errorText, "error");
                 },
             });
         }
